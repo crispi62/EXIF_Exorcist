@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "builtins": "^5.1.0",
+    "esbuild": "^0.27.0",
+    "exif-parser": "^0.1.12",
+    "exifreader": "^4.32.0",
+    "obsidian": "^1.10.2-1",
+    "obsidian-api": "^2.3.0",
+    "tslib": "^2.8.1",
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  }
+}

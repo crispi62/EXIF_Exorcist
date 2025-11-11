@@ -1,0 +1,10 @@
+{
+  "id": "exif-exorcist",
+  "name": "EXIF Exorcist",
+  "version": "1.0.0",
+  "minAppVersion": "1.1.0",
+  "description": "Reads EXIF data from JPG images and creates a sidecar note.",
+  "author": "Crispi",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}

@@ -1,0 +1,30 @@
+/* Defines the two-column box */
+.photoflow-container {
+    display: flex;
+    flex-direction: row;
+    gap: 15px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 10px;
+    background-color: var(--background-secondary);
+}
+
+/* The left column (image) */
+.photoflow-image {
+    flex: 1; /* Takes up 1 part of the space */
+    min-width: 0;
+}
+
+/* The right column (comment) */
+.photoflow-comment {
+    flex: 1; /* Takes up 1 part of the space */
+    min-width: 0;
+    font-size: 0.9em;
+}
+
+/* Ensure the image scales correctly */
+.photoflow-image img {
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
