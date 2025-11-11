@@ -6179,6 +6179,21 @@ var EXIFExorcistPlugin = class extends import_obsidian.Plugin {
         new import_obsidian.Notice("EXIF Exorcist: Failed to parse EXIF data. See console for details.");
       }
     });
+    this.registerEvent(this.app.vault.on("create", async (file) => {
+      if (!(file instanceof import_obsidian.TFile)) {
+        return;
+      }
+      if (file.extension !== "jpg" && file.extension !== "jpeg") {
+        return;
+      }
+      const targetFolder = "99_Attachments/Pictures/Daily/";
+      if (!file.path.startsWith(targetFolder)) {
+        return;
+      }
+      console.log(`EXIF Exorcist: Detected new image in target folder: ${file.path}`);
+      await sleep(500);
+      await this.processImage(file);
+    }));
   }
   async processImage(imageFile) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;

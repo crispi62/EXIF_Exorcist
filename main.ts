@@ -1,4 +1,4 @@
-import { App, MarkdownView, Plugin, TFile, Notice } from 'obsidian';
+import { App, MarkdownView, Plugin, TFile, Notice, TAbstractFile } from 'obsidian';
 // Import the exifreader library
 import * as ExifReader from 'exifreader';
 
@@ -8,6 +8,7 @@ export default class EXIFExorcistPlugin extends Plugin {
 
     async onload() {
         console.log('EXIF Exorcist: Loading (Direct-Read Mode)...');
+
         this.addRibbonIcon('image-file', 'EXIF Exorcist: Read Metadata', async () => {
             
             const activeFile = this.app.workspace.getActiveFile();
@@ -28,6 +29,32 @@ export default class EXIFExorcistPlugin extends Plugin {
                 new Notice("EXIF Exorcist: Failed to parse EXIF data. See console for details.");
             }
         });
+
+        // --- Automatic Folder Watching ---
+        this.registerEvent(this.app.vault.on('create', async (file: TAbstractFile) => {
+            // 1. Check if it's a file and not a folder
+            if (!(file instanceof TFile)) {
+                return;
+            }
+
+            // 2. Check if it's a JPG/JPEG file
+            if (file.extension !== 'jpg' && file.extension !== 'jpeg') {
+                return;
+            }
+
+            // 3. Check if it's in the target folder
+            const targetFolder = '99_Attachments/Pictures/Daily/';
+            if (!file.path.startsWith(targetFolder)) {
+                return;
+            }
+
+            console.log(`EXIF Exorcist: Detected new image in target folder: ${file.path}`);
+            // Wait a moment to ensure the file is fully written to disk before processing
+            await sleep(500);
+
+            // Process the newly created image file
+            await this.processImage(file);
+        }));
     }
 
     async processImage(imageFile: TFile) {
