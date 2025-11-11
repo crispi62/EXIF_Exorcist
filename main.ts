@@ -1,6 +1,7 @@
-import { App, MarkdownView, Plugin, TFile, Notice, TAbstractFile } from 'obsidian';
+import { App, MarkdownView, Plugin, TFile, Notice, TAbstractFile, requestUrl } from 'obsidian';
 // Import the exifreader library
 import * as ExifReader from 'exifreader';
+import { Moment } from 'moment';
 
 export default class EXIFExorcistPlugin extends Plugin {
 
@@ -80,48 +81,38 @@ export default class EXIFExorcistPlugin extends Plugin {
             title: imageFile.basename,
             // Add static fields
             type: 'image',
-            icon: '🖼️'
+            icon: '🖼️',
+            stage: 'seedling'
         };
-        metadata.place = ""; // Add empty place property
         const userCommentText = this.extractComment(tags);
 
-        if ((tags.xmp as any)?.subject?.description) {
-            metadata.tags = (tags.xmp as any).subject.description;
+        // --- Handle image_tags as a list ---
+        const subject = (tags.xmp as any)?.subject?.description;
+        if (subject) {
+            if (Array.isArray(subject)) {
+                metadata.image_tags = subject;
+            } else if (typeof subject === 'string') {
+                // Split comma-separated string into an array
+                metadata.image_tags = subject.split(',').map(tag => tag.trim()).filter(tag => tag);
+            }
         }
 
-        if (tags.gps?.Latitude && tags.gps?.Longitude) {
-            metadata.gpsLatitude = tags.gps.Latitude;
-            metadata.gpsLongitude = tags.gps.Longitude;
+        // --- GPS and Reverse Geocoding Feature Leap ---
+        if (tags.gps && tags.gps.Latitude && tags.gps.Longitude) {
+            const placeName = await this.reverseGeocode(tags.gps.Latitude, tags.gps.Longitude);
+            if (placeName) {
+                metadata.place = `[[${placeName}]]`;
+            }
         }
 
-        if ((tags.exif as any)?.DateTimeOriginal?.description) {
-            const originalDate = (tags.exif as any).DateTimeOriginal.description;
-            metadata.creation_date = originalDate.substring(0, 10).replace(/:/g, '-') + originalDate.substring(10);
+        const creationDateStr = (tags.exif as any)?.DateTimeOriginal?.description;
+        if (creationDateStr) {
+            metadata.creation_date = this.formatExifDate(creationDateStr);
         }
-        if ((tags.exif as any)?.DateTime?.description) {
-            const modifyDate = (tags.exif as any).DateTime.description;
-            metadata.modified_date = modifyDate.substring(0, 10).replace(/:/g, '-') + modifyDate.substring(10);
+        const modifyDateStr = (tags.exif as any)?.DateTime?.description;
+        if (modifyDateStr) {
+            metadata.modified_date = this.formatExifDate(modifyDateStr);
         }
-
-        // --- Add new fields as requested ---
-
-        // Camera Model
-        if ((tags.exif as any)?.Model?.description) {
-            metadata.camera_model = (tags.exif as any).Model.description;
-        }
-
-        // File Type, Height, and Width from the 'file' group
-        if ((tags.file as any)?.FileType?.value) {
-            metadata.file_type = (tags.file as any).FileType.value;
-        }
-        if ((tags.file as any)?.['Image Height']?.description) {
-            metadata.image_height = (tags.file as any)['Image Height'].description;
-        }
-        if ((tags.file as any)?.['Image Width']?.description) {
-            metadata.image_width = (tags.file as any)['Image Width'].description;
-        }
-        metadata.image_description = (tags.exif as any)?.ImageDescription?.description || "";
-        
 
         // Log all the extracted metadata to the console
         console.log("EXIF Exorcist: --- Extracted Metadata Summary ---");
@@ -168,6 +159,41 @@ export default class EXIFExorcistPlugin extends Plugin {
         return "";
     }
 
+    async reverseGeocode(lat: number, lon: number): Promise<string | null> {
+        console.log(`EXIF Exorcist: Performing reverse geocoding for ${lat}, ${lon}`);
+        try {
+            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`;
+            const response = await requestUrl({ url, method: 'GET' });
+
+            if (response.status === 200) {
+                const data = response.json;
+                // Extract a meaningful place name, trying city, town, village, etc.
+                const place = data.address.city || data.address.town || data.address.village || data.address.county || data.address.state;
+                if (place) {
+                    console.log(`EXIF Exorcist: Found place: ${place}`);
+                    return place;
+                }
+            }
+        } catch (error) {
+            console.error("EXIF Exorcist: Reverse geocoding failed.");
+            console.error(error);
+            new Notice("Reverse geocoding failed. See console for details.");
+        }
+
+        console.log("EXIF Exorcist: Could not find a place name for the given coordinates.");
+        return null;
+    }
+
+    formatExifDate(exifDate: string): string {
+        // EXIF dates are 'YYYY:MM:DD HH:MM:SS'
+        // We can use moment, which is available in Obsidian, for robust parsing
+        const m = (window as any).moment(exifDate, 'YYYY:MM:DD HH:mm:ss');
+        if (m.isValid()) {
+            return m.format('DD-MM-YYYY');
+        }
+        return ''; // Return empty string if parsing fails
+    }
+
     async createSidecarNote(imageFile: TFile, metadata: { [key: string]: any }, comment: string) {
         const imagePath = imageFile.path;
         const notePath = imagePath.replace(/\.(jpe?g)$/i, '.md');
@@ -175,14 +201,18 @@ export default class EXIFExorcistPlugin extends Plugin {
 
         // Define the exact order for YAML properties
         const yamlOrder = [
-            'creation_date', 'modified_date', 'type', 'icon', 'file_type', 
-            'image_height', 'image_width', 'camera_model', 'gps_latitude', 
-            'gps_longitude', 'place', 'image_description', 'tags'
+            'creation_date', 'modified_date', 'type', 'icon', 'stage', 'place', 'image_tags'
         ];
 
         // Helper to format a YAML line
         const formatYamlLine = (key: string, value: any) => {
             if (value === undefined || value === null) return '';
+            // This function is for simple key-value pairs, not nested objects.
+            // Nested objects like 'gps' will be handled explicitly in the loop.
+            if (key === 'image_tags' && Array.isArray(value)) {
+                // Format as a YAML list: [tag1, tag2]
+                return `image_tags: [${value.join(', ')}]\n`;
+            }
             if (typeof value === 'string') {
                 // Wrap strings in quotes and escape existing quotes
                 return `${key}: "${String(value).replace(/"/g, '\\"')}"\n`;
@@ -191,43 +221,28 @@ export default class EXIFExorcistPlugin extends Plugin {
         };
 
         // Add the static image link first
-        yaml += `image: "[[${imageFile.name}]]"\n`;
+        yaml += `image_file: "[[${imageFile.name}]]"\n`;
 
         // Add properties in the specified order
         for (const key of yamlOrder) {
-            // Remap gpsLatitude/Longitude to gps_latitude/longitude for YAML
-            if (key === 'gps_latitude' && metadata.gpsLatitude) yaml += formatYamlLine('gps_latitude', metadata.gpsLatitude);
-            else if (key === 'gps_longitude' && metadata.gpsLongitude) yaml += formatYamlLine('gps_longitude', metadata.gpsLongitude);
-            else if (metadata[key] !== undefined) yaml += formatYamlLine(key, metadata[key]);
+            if (metadata[key] !== undefined) yaml += formatYamlLine(key, metadata[key]);
         }
 
         yaml += '---\n';
 
         // --- Build the note body ---
 
-        // 1. Start with the YAML frontmatter and a title
-        let noteContent = `${yaml}
-<div style="text-align: center;"><h1>${metadata.title}</h1></div>
-
-`;
+        // 1. Start with the YAML frontmatter
+        let noteContent = `${yaml}`;
 
         // 2. Embed the image
-        const imageSrc = this.app.vault.adapter.getResourcePath(imageFile.path);
-        noteContent += `<img src="${imageSrc}" width="75%" style="display: block; margin-left: auto; margin-right: auto; border: 1px solid black;">\n\n`;
+        noteContent += `![[${imageFile.name}]]\n\n`;
 
-        // 3. Add the comment/caption inside a callout block, if it exists
+        // 3. Add the extracted comment text directly to the note body, if it exists
         if (comment) {
-            noteContent += `> [!NOTE] Comment\n`;
-            noteContent += `> ${comment.replace(/\n/g, '\n> ')}\n\n`; // Ensure multi-line comments are quoted
+            noteContent += `${comment}\n`;
             console.log(`EXIF Exorcist: Appending text to note.`);
         }
-
-        // 4. Add a "Details" section with other key metadata
-        noteContent += '---\n\n';
-        noteContent += '## Details\n';
-        if (metadata.camera_model) noteContent += `- **Camera**: ${metadata.camera_model}\n`;
-        if (metadata.creation_date) noteContent += `- **Created**: ${metadata.creation_date}\n`;
-        if (metadata.image_width && metadata.image_height) noteContent += `- **Dimensions**: ${metadata.image_width} x ${metadata.image_height}\n`;
 
         const newFile = await this.app.vault.create(notePath, noteContent);
         await this.app.workspace.getLeaf('tab').openFile(newFile);

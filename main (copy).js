@@ -6233,13 +6233,13 @@ var EXIFExorcistPlugin = class extends import_obsidian.Plugin {
         metadata.place = `[[${placeName}]]`;
       }
     }
-    const creationDateStr = (_d = (_c = tags.exif) == null ? void 0 : _c.DateTimeOriginal) == null ? void 0 : _d.description;
-    if (creationDateStr) {
-      metadata.creation_date = this.formatExifDate(creationDateStr);
+    if ((_d = (_c = tags.exif) == null ? void 0 : _c.DateTimeOriginal) == null ? void 0 : _d.description) {
+      const originalDate = tags.exif.DateTimeOriginal.description;
+      metadata.creation_date = originalDate.substring(8, 10) + "-" + originalDate.substring(5, 7) + "-" + originalDate.substring(0, 4);
     }
-    const modifyDateStr = (_f = (_e = tags.exif) == null ? void 0 : _e.DateTime) == null ? void 0 : _f.description;
-    if (modifyDateStr) {
-      metadata.modified_date = this.formatExifDate(modifyDateStr);
+    if ((_f = (_e = tags.exif) == null ? void 0 : _e.DateTime) == null ? void 0 : _f.description) {
+      const modifyDate = tags.exif.DateTime.description;
+      metadata.modified_date = modifyDate.substring(8, 10) + "-" + modifyDate.substring(5, 7) + "-" + modifyDate.substring(0, 4);
     }
     console.log("EXIF Exorcist: --- Extracted Metadata Summary ---");
     console.log(`Comment/Caption: ${userCommentText || "Not found"}`);
@@ -6300,13 +6300,6 @@ var EXIFExorcistPlugin = class extends import_obsidian.Plugin {
     }
     console.log("EXIF Exorcist: Could not find a place name for the given coordinates.");
     return null;
-  }
-  formatExifDate(exifDate) {
-    const m = window.moment(exifDate, "YYYY:MM:DD HH:mm:ss");
-    if (m.isValid()) {
-      return m.format("DD-MM-YYYY");
-    }
-    return "";
   }
   async createSidecarNote(imageFile, metadata, comment) {
     const imagePath = imageFile.path;
